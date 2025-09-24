@@ -6,10 +6,21 @@ from datetime import datetime, timezone, timedelta
 
 import discord
 
+
+def get_int_env(name: str, default: int) -> int:
+    val = os.getenv(name, "").strip()
+    if not val:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        logging.warning(f"Invalid int for {name}={val!r}, falling back to {default}")
+        return default
+
 TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = int(os.getenv("GUILD_ID", "0"))
-ROLE_ID = int(os.getenv("ROLE_ID", "0"))
-THRESHOLD_DAYS = int(os.getenv("THRESHOLD_DAYS", "2"))
+GUILD_ID = get_int_env("GUILD_ID", 0)
+ROLE_ID = get_int_env("ROLE_ID", 0)
+THRESHOLD_DAYS = get_int_env("THRESHOLD_DAYS", 2)
 
 # Optional: customize the DM text via env var
 DM_MESSAGE = os.getenv(
@@ -25,7 +36,7 @@ EXCLUDE_ROLE_IDS = [
 
 # ---- Test/override flags ----
 # TARGET_USER_ID: only act on this single user (skip full-member scan)
-TARGET_USER_ID = int(os.getenv("TARGET_USER_ID", "0"))  # 0 disables targeted mode
+TARGET_USER_ID = get_int_env("TARGET_USER_ID", 0)
 # FORCE_ASSIGN: if "1", bypass time threshold check (for testing)
 FORCE_ASSIGN = os.getenv("FORCE_ASSIGN", "0") == "1"
 # DRY_RUN: if "1", log actions but do not add roles or send DMs
