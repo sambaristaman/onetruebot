@@ -46,9 +46,9 @@ jobs:
           ROLE_ID: ${{ secrets.ROLE_ID }}
 
           # existing optional config
-          THRESHOLD_DAYS: ${{ vars.THRESHOLD_DAYS }}
-          EXCLUDE_ROLE_IDS: ${{ vars.EXCLUDE_ROLE_IDS }}
-          DM_MESSAGE: ${{ vars.DM_MESSAGE }}
+          THRESHOLD_DAYS: ${{ secrets.THRESHOLD_DAYS }}
+          EXCLUDE_ROLE_IDS: ${{ secrets.EXCLUDE_ROLE_IDS }}
+          DM_MESSAGE: ${{ secrets.DM_MESSAGE }}
 
           # testing inputs (override-able at dispatch time)
           TARGET_USER_ID: ${{ inputs.target_user_id }}
