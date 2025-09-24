@@ -1,0 +1,57 @@
+# .github/workflows/assign-roles.yml
+name: assign-roles-daily
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # daily at 12:00 UTC
+  workflow_dispatch:
+    inputs:
+      target_user_id:
+        description: "Only process this user ID (optional)"
+        required: false
+        type: string
+      force_assign:
+        description: "Bypass threshold for testing (0/1)"
+        required: false
+        default: "0"
+        type: choice
+        options: ["0", "1"]
+      dry_run:
+        description: "Log only; do not change roles/DM (0/1)"
+        required: false
+        default: "0"
+        type: choice
+        options: ["0", "1"]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run time-based role assigner
+        env:
+          # required
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          ROLE_ID: ${{ secrets.ROLE_ID }}
+
+          # existing optional config
+          THRESHOLD_DAYS: ${{ vars.THRESHOLD_DAYS }}
+          EXCLUDE_ROLE_IDS: ${{ vars.EXCLUDE_ROLE_IDS }}
+          DM_MESSAGE: ${{ vars.DM_MESSAGE }}
+
+          # testing inputs (override-able at dispatch time)
+          TARGET_USER_ID: ${{ inputs.target_user_id }}
+          FORCE_ASSIGN: ${{ inputs.force_assign }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: python main.py
