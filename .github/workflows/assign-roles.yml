@@ -3,7 +3,7 @@ name: assign-roles-daily
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # daily at 12:00 UTC
+    - cron: "0 17 * * *"   # daily at 12:00 UTC
   workflow_dispatch:
     inputs:
       target_user_id:
