@@ -59,6 +59,7 @@ TARGET_USER_ID = get_int_env("TARGET_USER_ID", 0)
 
 # New role-pair feature env
 PAIR_PRIMARY_ROLE_ID = get_int_env("PAIR_PRIMARY_ROLE_ID", 0)  # role to remove
+PAIR_OTHER_ROLE_ID = get_int_env("PAIR_OTHER_ROLE_ID", 0)  # role to remove if the pair match
 PAIR_SECONDARY_ROLE_IDS = parse_id_csv("PAIR_SECONDARY_ROLE_IDS")[:3]  # up to 3 roles
 
 # Messages mapped by index to the secondary roles above.
@@ -203,6 +204,13 @@ async def process_role_pairs(guild: discord.Guild) -> None:
             logging.warning(f"Primary role {PAIR_PRIMARY_ROLE_ID} not found.")
             return
 
+    removal_role: Optional[discord.Role] = guild.get_role(PAIR_OTHER_ROLE_ID)
+    if removal_role is None:
+        try:
+            removal_role = await guild.fetch_role(PAIR_OTHER_ROLE_ID)
+        except discord.NotFound:
+            logging.warning(f"Other role {PAIR_OTHER_ROLE_ID} not found.")
+
     sec_roles: List[Tuple[int, Optional[discord.Role]]] = []
     for idx, sec_id in enumerate(PAIR_SECONDARY_ROLE_IDS):
         role_obj = guild.get_role(sec_id)
@@ -246,6 +254,17 @@ async def process_role_pairs(guild: discord.Guild) -> None:
             except discord.HTTPException as e:
                 logging.warning(f"HTTP error removing role from {member}: {e}")
                 continue
+
+            if not removal_role is None:
+                try:
+                    await member.remove_roles(removal_role, reason="Auto: role-pair resolution")
+                except discord.Forbidden:
+                    logging.warning(f"Missing permissions to remove '{removal_role.name}' from {member}.")
+                    continue
+                except discord.HTTPException as e:
+                    logging.warning(f"HTTP error removing role from {member}: {e}")
+                    continue
+
 
         await send_multi_dm(member, msg)
         affected += 1

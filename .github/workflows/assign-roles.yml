@@ -49,6 +49,7 @@ jobs:
           EXCLUDE_ROLE_IDS: ${{ vars.EXCLUDE_ROLE_IDS }}
 
           PAIR_PRIMARY_ROLE_ID: ${{ vars.PAIR_PRIMARY_ROLE_ID }}
+          PAIR_OTHER_ROLE_ID: ${{ vars.PAIR_OTHER_ROLE_ID }}
           PAIR_SECONDARY_ROLE_IDS: ${{ vars.PAIR_SECONDARY_ROLE_IDS }}
           PAIR_DM_MESSAGE_1: ${{ vars.PAIR_DM_MESSAGE_1 }}
           PAIR_DM_MESSAGE_2: ${{ vars.PAIR_DM_MESSAGE_2 }}
