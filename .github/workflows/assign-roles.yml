@@ -42,16 +42,21 @@ jobs:
         env:
           # required
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          GUILD_ID: ${{ secrets.GUILD_ID }}
-          ROLE_ID: ${{ secrets.ROLE_ID }}
+          GUILD_ID: ${{ vars.GUILD_ID }}
+          ROLE_ID: ${{ vars.ROLE_ID }}
+          THRESHOLD_DAYS: ${{ vars.THRESHOLD_DAYS }}
+          DM_MESSAGE: ${{ vars.DM_MESSAGE }}
+          EXCLUDE_ROLE_IDS: ${{ vars.EXCLUDE_ROLE_IDS }}
 
-          # existing optional config
-          THRESHOLD_DAYS: ${{ secrets.THRESHOLD_DAYS }}
-          EXCLUDE_ROLE_IDS: ${{ secrets.EXCLUDE_ROLE_IDS }}
-          DM_MESSAGE: ${{ secrets.DM_MESSAGE }}
+          PAIR_PRIMARY_ROLE_ID: ${{ vars.PAIR_PRIMARY_ROLE_ID }}
+          PAIR_SECONDARY_ROLE_IDS: ${{ vars.PAIR_SECONDARY_ROLE_IDS }}
+          PAIR_DM_MESSAGE_1: ${{ vars.PAIR_DM_MESSAGE_1 }}
+          PAIR_DM_MESSAGE_2: ${{ vars.PAIR_DM_MESSAGE_2 }}
+          PAIR_DM_MESSAGE_3: ${{ vars.PAIR_DM_MESSAGE_3 }}
 
-          # testing inputs (override-able at dispatch time)
+          # Optional flags
+          DRY_RUN: ${{ inputs.dry_run }}
           TARGET_USER_ID: ${{ inputs.target_user_id }}
           FORCE_ASSIGN: ${{ inputs.force_assign }}
-          DRY_RUN: ${{ inputs.dry_run }}
+
         run: python main.py
