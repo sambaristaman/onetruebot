@@ -72,7 +72,7 @@ PAIR_DM_MESSAGES = [
 # Discord intents
 intents = discord.Intents.none()
 intents.guilds = True
-intents.members = True  # Make sure "Server Members Intent" is enabled in your application
+intents.members = True  # Make sure "Server Members Intent" is enabled in the Dev Portal
 
 client = discord.Client(intents=intents)
 
@@ -96,9 +96,10 @@ async def send_single_dm(member: discord.Member, text: str) -> None:
 
 
 async def send_multi_dm(member: discord.Member, text: str) -> None:
-    """New feature behavior: one DM per line."""
+    """New feature behavior: one DM per line. Handles both real and escaped '\n'."""
     if not text:
         return
+    text = text.replace("\\n", "\n")  # convert literal \n into newlines
     lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
     for ln in lines:
         try:
@@ -116,14 +117,23 @@ async def send_multi_dm(member: discord.Member, text: str) -> None:
 
 
 # -------------------------
-# Original feature (assign on threshold)
+# Original feature (assign on threshold) — now based on server tenure
 # -------------------------
 def is_past_threshold(member: discord.Member) -> bool:
+    """
+    Returns True if the member has been in THIS SERVER for at least THRESHOLD_DAYS.
+    Uses member.joined_at (resets on re-join), not account creation time.
+    """
     if FORCE_ASSIGN:
         return True
-    created = member.created_at.replace(tzinfo=timezone.utc)
-    age = datetime.now(timezone.utc) - created
-    return age >= timedelta(days=max(0, THRESHOLD_DAYS))
+    joined_at = member.joined_at
+    if not joined_at:
+        # joined_at can be None if not populated yet → treat as not past threshold
+        return False
+    if joined_at.tzinfo is None:
+        joined_at = joined_at.replace(tzinfo=timezone.utc)
+    tenure = datetime.now(timezone.utc) - joined_at
+    return tenure >= timedelta(days=max(0, THRESHOLD_DAYS))
 
 
 async def add_role_if_needed(member: discord.Member, role: discord.Role) -> bool:
@@ -137,14 +147,17 @@ async def add_role_if_needed(member: discord.Member, role: discord.Role) -> bool
         logging.info(f"[SKIP] {member} excluded via EXCLUDE_ROLE_IDS.")
         return False
     if not is_past_threshold(member):
-        logging.info(f"[SKIP] {member} not past threshold.")
+        logging.info(
+            f"[SKIP] {member} not past server-tenure threshold "
+            f"({THRESHOLD_DAYS}d required)."
+        )
         return False
 
     if DRY_RUN:
         logging.info(f"[DRY_RUN] Would add role '{role.name}' to {member}.")
     else:
         try:
-            await member.add_roles(role, reason="Auto: threshold reached")
+            await member.add_roles(role, reason="Auto: server-tenure threshold reached")
         except discord.Forbidden:
             logging.warning(f"Missing permissions to add role '{role.name}' to {member}.")
             return False
