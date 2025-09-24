@@ -62,7 +62,6 @@ PAIR_PRIMARY_ROLE_ID = get_int_env("PAIR_PRIMARY_ROLE_ID", 0)  # role to remove
 PAIR_SECONDARY_ROLE_IDS = parse_id_csv("PAIR_SECONDARY_ROLE_IDS")[:3]  # up to 3 roles
 
 # Messages mapped by index to the secondary roles above.
-# Each message can contain \n to split into multiple DMs (one DM per line).
 PAIR_DM_MESSAGES = [
     (os.getenv("PAIR_DM_MESSAGE_1", "") or "").strip(),
     (os.getenv("PAIR_DM_MESSAGE_2", "") or "").strip(),
@@ -72,7 +71,7 @@ PAIR_DM_MESSAGES = [
 # Discord intents
 intents = discord.Intents.none()
 intents.guilds = True
-intents.members = True  # Make sure "Server Members Intent" is enabled in the Dev Portal
+intents.members = True  # enable "Server Members Intent"
 
 client = discord.Client(intents=intents)
 
@@ -81,7 +80,7 @@ client = discord.Client(intents=intents)
 # Messaging helpers
 # -------------------------
 async def send_single_dm(member: discord.Member, text: str) -> None:
-    """Original feature behavior: one DM total (no line splitting)."""
+    """DM as one message."""
     if not text:
         return
     try:
@@ -96,10 +95,10 @@ async def send_single_dm(member: discord.Member, text: str) -> None:
 
 
 async def send_multi_dm(member: discord.Member, text: str) -> None:
-    """New feature behavior: one DM per line. Handles both real and escaped '\n'."""
+    """DM one line at a time. Handles both real and escaped '\n'."""
     if not text:
         return
-    text = text.replace("\\n", "\n")  # convert literal \n into newlines
+    text = text.replace("\\n", "\n")
     lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
     for ln in lines:
         try:
@@ -113,22 +112,18 @@ async def send_multi_dm(member: discord.Member, text: str) -> None:
         except discord.HTTPException as e:
             logging.warning(f"HTTP error DMing {member}: {e}")
             break
-        await asyncio.sleep(0.2)  # gentle pacing
+        await asyncio.sleep(0.2)
 
 
 # -------------------------
-# Original feature (assign on threshold) — now based on server tenure
+# Threshold check (server tenure)
 # -------------------------
 def is_past_threshold(member: discord.Member) -> bool:
-    """
-    Returns True if the member has been in THIS SERVER for at least THRESHOLD_DAYS.
-    Uses member.joined_at (resets on re-join), not account creation time.
-    """
+    """True if member has been in server >= THRESHOLD_DAYS."""
     if FORCE_ASSIGN:
         return True
     joined_at = member.joined_at
     if not joined_at:
-        # joined_at can be None if not populated yet → treat as not past threshold
         return False
     if joined_at.tzinfo is None:
         joined_at = joined_at.replace(tzinfo=timezone.utc)
@@ -137,7 +132,10 @@ def is_past_threshold(member: discord.Member) -> bool:
 
 
 async def add_role_if_needed(member: discord.Member, role: discord.Role) -> bool:
-    """Returns True if role was (or would be) added; False otherwise."""
+    """
+    Returns True if role was actually added.
+    Sends DM only if the role was added.
+    """
     if member.bot:
         return False
     if role in member.roles:
@@ -153,6 +151,7 @@ async def add_role_if_needed(member: discord.Member, role: discord.Role) -> bool
         )
         return False
 
+    # Passed all checks → assign
     if DRY_RUN:
         logging.info(f"[DRY_RUN] Would add role '{role.name}' to {member}.")
     else:
@@ -165,7 +164,7 @@ async def add_role_if_needed(member: discord.Member, role: discord.Role) -> bool
             logging.warning(f"HTTP error adding role to {member}: {e}")
             return False
 
-    # Original behavior: single DM (no splitting)
+    # Only DM if role was (or would be) assigned
     await send_single_dm(member, DM_MESSAGE)
     return True
 
@@ -182,33 +181,28 @@ async def process_single_user(guild: discord.Guild, role: discord.Role) -> None:
 async def process_full_scan(guild: discord.Guild, role: discord.Role) -> None:
     changed = 0
     async for member in guild.fetch_members(limit=None):
-        changed += 1 if await add_role_if_needed(member, role) else 0
-        await asyncio.sleep(0.05)  # be nice to the API
+        if await add_role_if_needed(member, role):
+            changed += 1
+        await asyncio.sleep(0.05)
     logging.info(f"Threshold scan done. Members updated: {changed}.")
 
 
 # -------------------------
-# New feature (role-pair scanner)
+# Role-pair feature
 # -------------------------
 async def process_role_pairs(guild: discord.Guild) -> None:
-    """
-    If a member has PAIR_PRIMARY_ROLE_ID AND any of PAIR_SECONDARY_ROLE_IDS,
-    remove the primary and send mapped multi-line DM.
-    """
     if not PAIR_PRIMARY_ROLE_ID or not PAIR_SECONDARY_ROLE_IDS:
         logging.info("Role-pair scan not configured. Skipping.")
         return
 
-    # Resolve primary role
     primary_role: Optional[discord.Role] = guild.get_role(PAIR_PRIMARY_ROLE_ID)
     if primary_role is None:
         try:
             primary_role = await guild.fetch_role(PAIR_PRIMARY_ROLE_ID)
         except discord.NotFound:
-            logging.warning(f"Primary role {PAIR_PRIMARY_ROLE_ID} not found. Skipping role-pair scan.")
+            logging.warning(f"Primary role {PAIR_PRIMARY_ROLE_ID} not found.")
             return
 
-    # Resolve secondary roles into (index, Role|None)
     sec_roles: List[Tuple[int, Optional[discord.Role]]] = []
     for idx, sec_id in enumerate(PAIR_SECONDARY_ROLE_IDS):
         role_obj = guild.get_role(sec_id)
@@ -216,12 +210,11 @@ async def process_role_pairs(guild: discord.Guild) -> None:
             try:
                 role_obj = await guild.fetch_role(sec_id)
             except discord.NotFound:
-                logging.warning(f"Secondary role {sec_id} not found; will be ignored.")
+                logging.warning(f"Secondary role {sec_id} not found.")
                 role_obj = None
         sec_roles.append((idx, role_obj))
 
     affected = 0
-
     async for member in guild.fetch_members(limit=None):
         if member.bot:
             continue
@@ -230,7 +223,6 @@ async def process_role_pairs(guild: discord.Guild) -> None:
         if primary_role not in member.roles:
             continue
 
-        # Find the first matching secondary role
         matched_idx = None
         matched_role = None
         for idx, sec in sec_roles:
@@ -243,7 +235,6 @@ async def process_role_pairs(guild: discord.Guild) -> None:
 
         msg = PAIR_DM_MESSAGES[matched_idx] if matched_idx < len(PAIR_DM_MESSAGES) else ""
 
-        # Remove primary role
         if DRY_RUN:
             logging.info(f"[DRY_RUN] Would REMOVE '{primary_role.name}' from {member} (paired with '{matched_role.name}').")
         else:
@@ -256,7 +247,6 @@ async def process_role_pairs(guild: discord.Guild) -> None:
                 logging.warning(f"HTTP error removing role from {member}: {e}")
                 continue
 
-        # Send multi-line DM mapped to the matching secondary role
         await send_multi_dm(member, msg)
         affected += 1
         await asyncio.sleep(0.05)
@@ -265,24 +255,21 @@ async def process_role_pairs(guild: discord.Guild) -> None:
 
 
 # -------------------------
-# Job orchestration
+# Orchestration
 # -------------------------
 async def run_job():
     guild = client.get_guild(GUILD_ID) or await client.fetch_guild(GUILD_ID)
 
-    # Resolve the role for the original feature
     base_role = guild.get_role(ROLE_ID)
     if base_role is None:
         try:
             base_role = await guild.fetch_role(ROLE_ID)
         except discord.NotFound:
-            logging.error(f"ROLE_ID {ROLE_ID} not found in guild.")
+            logging.error(f"ROLE_ID {ROLE_ID} not found.")
             return
 
-    # 1) New feature first: resolve role pairs
     await process_role_pairs(guild)
 
-    # 2) Original feature next: targeted or full scan
     if TARGET_USER_ID:
         logging.info("Running in TARGETED MODE (single user).")
         await process_single_user(guild, base_role)
@@ -297,7 +284,7 @@ async def on_ready():
     try:
         await run_job()
     finally:
-        await client.close()  # clean exit
+        await client.close()
 
 
 if __name__ == "__main__":
